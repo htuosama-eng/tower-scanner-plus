@@ -59,19 +59,22 @@ object CellInfoHelper {
         val id = info.cellIdentity
         val ss = info.cellSignalStrength
         val dbm = ss?.dbm ?: Int.MIN_VALUE
-        // MCC/MNC من معرّفات الخلايا الفرعية (getMcc/getMnc بالأرقام) بدلاً من
-        // دوال CellIdentity النصية، لأنها غير متاحة للتجميع على كل الإصدارات.
-        val mccMnc: Pair<String?, String?> = when (id) {
-            is CellIdentityLte -> fmtMccMnc(id.mcc, id.mnc)
-            is CellIdentityGsm -> fmtMccMnc(id.mcc, id.mnc)
-            is CellIdentityWcdma -> fmtMccMnc(id.mcc, id.mnc)
-            is CellIdentityNr -> if (android.os.Build.VERSION.SDK_INT >= 29) fmtMccMnc(id.mcc, id.mnc) else Pair(null, null)
-            is CellIdentityTdscdma -> if (android.os.Build.VERSION.SDK_INT >= 29) fmtMccMnc(id.mcc, id.mnc) else Pair(null, null)
-            else -> Pair(null, null)
+        // MCC/MNC واسم المشغّل دوال موجودة على معرّفات الخلايا الفرعية فقط
+        // (CellIdentityLte/Gsm/Wcdma/Nr/Tdscdma) وليست على CellIdentity الأساسي،
+        // وهي من API 28، لذلك تُقرأ بعد فحص النوع وفحص إصدار النظام.
+        var operator = ""
+        var mcc: String? = null
+        var mnc: String? = null
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            when (id) {
+                is CellIdentityLte -> { operator = id.operatorAlphaLong.toString(); mcc = id.mccString; mnc = id.mncString }
+                is CellIdentityNr -> { operator = id.operatorAlphaLong.toString(); mcc = id.mccString; mnc = id.mncString }
+                is CellIdentityGsm -> { operator = id.operatorAlphaLong.toString(); mcc = id.mccString; mnc = id.mncString }
+                is CellIdentityWcdma -> { operator = id.operatorAlphaLong.toString(); mcc = id.mccString; mnc = id.mncString }
+                is CellIdentityTdscdma -> { operator = id.operatorAlphaLong.toString(); mcc = id.mccString; mnc = id.mncString }
+                else -> {}
+            }
         }
-        val mcc = mccMnc.first
-        val mnc = mccMnc.second
-        val operator = ""
 
         var type = context.getString(R.string.type_unknown)
         var bigLabel = "Cell ID"
@@ -154,12 +157,6 @@ object CellInfoHelper {
 
     private fun fmt(v: Int): String = if (v == Int.MAX_VALUE) "-" else v.toString()
     private fun fmtL(v: Long): String = if (v == Long.MAX_VALUE) "-" else v.toString()
-
-    private fun fmtMccMnc(mcc: Int, mnc: Int): Pair<String?, String?> {
-        val mccStr = if (mcc == Int.MAX_VALUE) null else mcc.toString()
-        val mncStr = if (mnc == Int.MAX_VALUE) null else mnc.toString()
-        return Pair(mccStr, mncStr)
-    }
 
     fun qualityLabel(dbm: Int): String {
         if (dbm == Int.MIN_VALUE) return "-"
