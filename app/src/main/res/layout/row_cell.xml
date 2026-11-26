@@ -2,6 +2,7 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:background="@android:color/white"
     android:orientation="vertical"
     android:padding="10dp">
 
@@ -9,27 +10,44 @@
         android:id="@+id/rowType"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:textColor="@color/ink"
+        android:textSize="16sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/rowBigId"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="@color/ink"
+        android:textSize="17sp"
         android:textStyle="bold" />
 
     <TextView
         android:id="@+id/rowOperator"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content" />
+        android:layout_height="wrap_content"
+        android:textColor="@color/ink"
+        android:textSize="14sp" />
 
     <TextView
         android:id="@+id/rowSignal"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content" />
+        android:layout_height="wrap_content"
+        android:textColor="@color/ink"
+        android:textSize="14sp"
+        android:textStyle="bold" />
 
     <TextView
         android:id="@+id/rowDetails"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:textColor="#546E7A" />
+        android:textColor="@color/details_text"
+        android:textSize="14sp" />
 
     <TextView
         android:id="@+id/rowBadge"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:textColor="#2E7D32" />
+        android:textColor="@color/green"
+        android:textStyle="bold" />
 </LinearLayout>
