@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:background="@android:color/white">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -13,28 +14,48 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/call_settings_title"
+            android:textColor="@color/ink"
             android:textSize="22sp"
             android:textStyle="bold" />
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/accessibility_title"
+            android:textColor="@color/ink"
+            android:textSize="17sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
             android:layout_marginTop="6dp"
-            android:text="@string/default_dialer_hint"
-            android:textColor="#546E7A" />
+            android:text="@string/accessibility_hint"
+            android:textColor="@color/muted" />
+
+        <TextView
+            android:id="@+id/tvAccessibilityStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="@string/accessibility_off"
+            android:textColor="@color/ink"
+            android:textStyle="bold" />
 
         <Button
-            android:id="@+id/btnDefaultDialer"
+            android:id="@+id/btnAccessibility"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:text="@string/set_default_dialer" />
+            android:text="@string/enable_accessibility" />
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:text="@string/call_number"
+            android:textColor="@color/ink"
             android:textStyle="bold" />
 
         <EditText
@@ -42,7 +63,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:hint="@string/call_number_hint"
-            android:inputType="phone" />
+            android:inputType="phone"
+            android:textColor="@color/ink" />
 
         <Button
             android:id="@+id/btnSaveNumber"
@@ -55,6 +77,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:text="@string/out_duration"
+            android:textColor="@color/ink"
             android:textStyle="bold" />
 
         <EditText
@@ -62,13 +85,15 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:hint="15"
-            android:inputType="number" />
+            android:inputType="number"
+            android:textColor="@color/ink" />
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:text="@string/in_duration"
+            android:textColor="@color/ink"
             android:textStyle="bold" />
 
         <EditText
@@ -76,7 +101,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:hint="15"
-            android:inputType="number" />
+            android:inputType="number"
+            android:textColor="@color/ink" />
 
         <Button
             android:id="@+id/btnSaveDurations"
@@ -89,13 +115,15 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:text="@string/pinned_tower"
+            android:textColor="@color/ink"
             android:textStyle="bold" />
 
         <TextView
             android:id="@+id/tvPinnedTower"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/no_pinned_tower" />
+            android:text="@string/no_pinned_tower"
+            android:textColor="@color/ink" />
 
         <Button
             android:id="@+id/btnPinTower"
@@ -114,13 +142,15 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:text="@string/enable_automation" />
+            android:text="@string/enable_automation"
+            android:textColor="@color/ink" />
 
         <Switch
             android:id="@+id/swRepeat"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/auto_repeat" />
+            android:text="@string/auto_repeat"
+            android:textColor="@color/ink" />
 
         <Button
             android:id="@+id/btnCallNow"
@@ -140,12 +170,14 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:text="@string/status"
+            android:textColor="@color/ink"
             android:textStyle="bold" />
 
         <TextView
             android:id="@+id/tvStatus"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/call_status_idle" />
+            android:text="@string/call_status_idle"
+            android:textColor="@color/ink" />
     </LinearLayout>
 </ScrollView>
