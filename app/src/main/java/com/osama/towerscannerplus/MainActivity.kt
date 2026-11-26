@@ -21,6 +21,7 @@ import android.widget.TextView
 import android.widget.Toast
 import android.widget.ToggleButton
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import java.text.SimpleDateFormat
@@ -49,6 +50,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // الواجهة فاتحة دائماً مثل التطبيق الأصلي، حتى لو كان الهاتف على الوضع الداكن.
+        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         prefs = CallPrefs(this)
@@ -166,6 +169,12 @@ class MainActivity : AppCompatActivity() {
         val srvFields = findViewById<TextView>(R.id.srvFields)
         val srvSignal = findViewById<TextView>(R.id.srvSignal)
         val srvChange = findViewById<TextView>(R.id.srvChange)
+        val bars = listOf(
+            findViewById<View>(R.id.bar1),
+            findViewById<View>(R.id.bar2),
+            findViewById<View>(R.id.bar3),
+            findViewById<View>(R.id.bar4)
+        )
         if (serving == null) {
             bigLabel.text = "Cell ID"
             bigValue.text = "-"
@@ -173,6 +182,7 @@ class MainActivity : AppCompatActivity() {
             srvLte.text = "-"
             srvFields.text = "-"
             srvSignal.text = "-"
+            bars.forEach { it.setBackgroundColor(getColor(R.color.bar_off)) }
             srvChange.text = "${getString(R.string.last_tower_change)}: ${getString(R.string.never_changed)}"
             return
         }
@@ -185,7 +195,12 @@ class MainActivity : AppCompatActivity() {
         srvLabel.text = "${serving.typeLabel} — ${serving.operator}"
         srvLte.text = serving.details
         srvFields.text = serving.details
-        srvSignal.text = "${serving.signalText} (${serving.quality})"
+        srvSignal.text = "${getString(R.string.signal_strength)}: ${serving.signalText} (${serving.quality})"
+        val onColor = getColor(R.color.green)
+        val offColor = getColor(R.color.bar_off)
+        bars.forEachIndexed { index, bar ->
+            bar.setBackgroundColor(if (index < serving.signalLevel) onColor else offColor)
+        }
         val fmt = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
         srvChange.text = if (lastChangeWall == 0L) {
             "${getString(R.string.last_tower_change)}: ${getString(R.string.never_changed)}"
@@ -242,6 +257,7 @@ class MainActivity : AppCompatActivity() {
                 .inflate(R.layout.row_cell, parent, false)
             val row = rows[position]
             view.findViewById<TextView>(R.id.rowType).text = row.typeLabel
+            view.findViewById<TextView>(R.id.rowBigId).text = "${row.bigIdLabel}: ${row.bigIdValue}"
             view.findViewById<TextView>(R.id.rowOperator).text = row.operator
             view.findViewById<TextView>(R.id.rowSignal).text =
                 "${row.signalText} (${row.quality})"
@@ -253,6 +269,7 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         const val REQ_PERM = 1001
-        const val AUTO_INTERVAL_MS = 5000L
+        /** التحديث التلقائي كل ثانية. */
+        const val AUTO_INTERVAL_MS = 1000L
     }
 }
