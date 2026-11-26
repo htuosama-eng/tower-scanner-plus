@@ -111,7 +111,7 @@ class CallAutomationService : Service() {
                                 isAcceptedIncoming = true
                                 setStatus(getString(R.string.incoming_answered))
                             } else {
-                                setStatus(getString(R.string.need_default_dialer))
+                                setStatus(getString(R.string.need_accessibility))
                             }
                         } else if (prefs.automationEnabled) {
                             setStatus(getString(R.string.incoming_ignored))
@@ -151,12 +151,21 @@ class CallAutomationService : Service() {
         telephony = getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
         telecom = getSystemService(Context.TELECOM_SERVICE) as TelecomManager
         createChannel()
-        startForeground(NOTIF_ID, buildNotification(getString(R.string.automation_running)))
-        @Suppress("DEPRECATION")
-        telephony.listen(
-            phoneListener,
-            PhoneStateListener.LISTEN_CELL_INFO or PhoneStateListener.LISTEN_CALL_STATE
-        )
+        // بدء الخدمة الأمامية محمي: أي فشل هنا كان يُغلق التطبيق كاملاً عند تفعيل الأتمتة.
+        try {
+            startForeground(NOTIF_ID, buildNotification(getString(R.string.automation_running)))
+        } catch (_: Exception) {
+            setStatus(getString(R.string.automation_start_failed))
+        }
+        try {
+            @Suppress("DEPRECATION")
+            telephony.listen(
+                phoneListener,
+                PhoneStateListener.LISTEN_CELL_INFO or PhoneStateListener.LISTEN_CALL_STATE
+            )
+        } catch (_: Exception) {
+            setStatus(getString(R.string.automation_start_failed))
+        }
         refreshServingCell()
         handler.post(pollRunnable)
     }
@@ -276,57 +285,65 @@ class CallAutomationService : Service() {
             setStatus(getString(R.string.not_on_pinned_tower))
             return false
         }
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
-            setStatus(getString(R.string.need_call_permission))
-            return false
-        }
+        // الاتصال عبر تطبيق الهاتف نفسه: يفتح الماسح الرقمي بالرقم جاهزاً،
+        // وخدمة الوصول تضغط زر الاتصال تلقائياً. لا يحتاج إذن اتصال
+        // ولا تعيين التطبيق كتطبيق الهاتف الافتراضي.
         return try {
             lastDialAttemptMs = System.currentTimeMillis()
             dialing = true
             isOurOutgoingCall = true
-            val intent = Intent(Intent.ACTION_CALL, Uri.parse("tel:$number"))
+            prefs.setPending(CallPrefs.PENDING_CALL, 20000L)
+            val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$number"))
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             startActivity(intent)
             setStatus(getString(R.string.dialing))
             updateNotification()
             true
-        } catch (e: SecurityException) {
-            dialing = false
-            isOurOutgoingCall = false
-            setStatus(getString(R.string.need_call_permission))
-            false
         } catch (_: Exception) {
             dialing = false
             isOurOutgoingCall = false
+            prefs.clearPending()
+            setStatus(getString(R.string.unavailable))
             false
         }
     }
 
     private fun endCurrentCall(): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return false
-        return try {
-            telecom.endCall()
-        } catch (_: SecurityException) {
-            setStatus(getString(R.string.need_default_dialer))
-            false
-        } catch (_: Exception) {
-            false
+        // الإنهاء عبر تطبيق الهاتف: خدمة الوصول تضغط زر الإنهاء في شاشة المكالمة.
+        if (CallPrefs.isAccessibilityEnabled(this)) {
+            prefs.setPending(CallPrefs.PENDING_END, 15000L)
+            return true
         }
+        // احتياط نادر: إن كان التطبيق هو تطبيق الهاتف الافتراضي، استخدم TelecomManager.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            return try {
+                telecom.endCall()
+            } catch (_: Exception) {
+                setStatus(getString(R.string.need_accessibility))
+                false
+            }
+        }
+        setStatus(getString(R.string.need_accessibility))
+        return false
     }
 
     private fun acceptIncomingCall(): Boolean {
-        return try {
-            // acceptRingingCall ترجع Unit وليست Boolean، لذلك نرجع true بعد نجاحها.
-            telecom.acceptRingingCall()
-            true
-        } catch (_: SecurityException) {
-            setStatus(getString(R.string.need_default_dialer))
-            false
-        } catch (_: Exception) {
-            false
+        // الرد عبر تطبيق الهاتف: خدمة الوصول تضغط زر الرد في شاشة المكالمة الواردة.
+        if (CallPrefs.isAccessibilityEnabled(this)) {
+            prefs.setPending(CallPrefs.PENDING_ANSWER, 25000L)
+            return true
         }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            return try {
+                telecom.acceptRingingCall()
+                true
+            } catch (_: Exception) {
+                setStatus(getString(R.string.need_accessibility))
+                false
+            }
+        }
+        setStatus(getString(R.string.need_accessibility))
+        return false
     }
 
     // ---------- الحالة والإشعار ----------
@@ -368,9 +385,12 @@ class CallAutomationService : Service() {
     }
 
     private fun updateNotification() {
-        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val tower = servingLabel?.let { " | $it" } ?: ""
-        nm.notify(NOTIF_ID, buildNotification(lastStatus + tower))
+        try {
+            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val tower = servingLabel?.let { " | $it" } ?: ""
+            nm.notify(NOTIF_ID, buildNotification(lastStatus + tower))
+        } catch (_: Exception) {
+        }
     }
 
     companion object {
@@ -378,7 +398,7 @@ class CallAutomationService : Service() {
         const val ACTION_CALL_NOW = "com.osama.towerscannerplus.CALL_NOW"
         const val CHANNEL_ID = "call_auto"
         const val NOTIF_ID = 1001
-        const val POLL_MS = 4000L
+        const val POLL_MS = 1000L
         @Volatile
         var lastStatus: String = ""
     }
