@@ -1,0 +1,383 @@
+package com.osama.towerscannerplus
+
+import android.Manifest
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.app.Service
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.content.pm.ServiceInfo
+import android.net.Uri
+import android.os.Build
+import android.os.Handler
+import android.os.IBinder
+import android.os.Looper
+import android.telecom.TelecomManager
+import android.telephony.CellInfo
+import android.telephony.PhoneStateListener
+import android.telephony.TelephonyManager
+import androidx.core.app.ActivityCompat
+import androidx.core.app.NotificationCompat
+
+/**
+ * خدمة أتمتة الاتصال حسب البرج المثبّت.
+ *
+ * - تتصل بالرقم المحفوظ فقط أثناء وجود الهاتف على البرج المثبّت.
+ * - بعد الرد، تبقى المكالمة الصادرة مدة outDurationSec ثم تفصل وتعيد الاتصال.
+ * - إذا تغيّر البرج أثناء المكالمة، تفصل فوراً، وتعيد الاتصال عند العودة للبرج المثبّت.
+ * - المكالمة الواردة من الرقم نفسه: لا تُجاب إلا على البرج المثبّت، وتبقى مدة inDurationSec ثم تفصل.
+ *
+ * ملاحظة أندرويد: إنهاء مكالمة أو الرد عليها برمجياً يتطلب أن يكون التطبيق
+ * هو تطبيق الهاتف الافتراضي، وإلا يرفض TelecomManager الطلب باستثناء أمني.
+ */
+class CallAutomationService : Service() {
+
+    private lateinit var prefs: CallPrefs
+    private lateinit var telephony: TelephonyManager
+    private lateinit var telecom: TelecomManager
+    private val handler = Handler(Looper.getMainLooper())
+
+    private var servingKey: String? = null
+    private var servingLabel: String? = null
+    private var callState: Int = TelephonyManager.CALL_STATE_IDLE
+    private var isOurOutgoingCall = false
+    private var isAcceptedIncoming = false
+    private var singleCallMode = false
+    private var lastDialAttemptMs = 0L
+    private var lastCallEndedMs = 0L
+    private var dialing = false
+
+    private val pollRunnable = object : Runnable {
+        override fun run() {
+            refreshServingCell()
+            // أمان: إذا لم يبدأ الاتصال خلال 10 ثوانٍ (مثلاً ألغاه المستخدم)،
+            // أعد ضبط علامة الاتصال حتى لا تتوقف الأتمتة.
+            if (dialing && callState == TelephonyManager.CALL_STATE_IDLE &&
+                System.currentTimeMillis() - lastDialAttemptMs > 10000L
+            ) {
+                dialing = false
+                isOurOutgoingCall = false
+            }
+            evaluateGate()
+            handler.postDelayed(this, POLL_MS)
+        }
+    }
+
+    private val endCallRunnable = Runnable {
+        val reason = if (isOurOutgoingCall) {
+            getString(R.string.call_ended_duration)
+        } else {
+            getString(R.string.call_ended_duration)
+        }
+        endCurrentCall()
+        setStatus(reason)
+        isOurOutgoingCall = false
+        isAcceptedIncoming = false
+        lastCallEndedMs = System.currentTimeMillis()
+        if (!singleCallMode && prefs.automationEnabled && prefs.autoRepeat) {
+            scheduleRedial()
+        } else if (singleCallMode && !prefs.automationEnabled) {
+            stopSelf()
+        }
+    }
+
+    private val redialRunnable = Runnable {
+        dialing = false
+        if (prefs.automationEnabled && prefs.autoRepeat && onPinnedTower() && callState == TelephonyManager.CALL_STATE_IDLE) {
+            placeOutgoingCall()
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private val phoneListener = object : PhoneStateListener() {
+        override fun onCellInfoChanged(cellInfo: List<CellInfo>?) {
+            updateServingFromList(cellInfo)
+            evaluateGate()
+        }
+
+        override fun onCallStateChanged(state: Int, phoneNumber: String?) {
+            val prev = callState
+            callState = state
+            when (state) {
+                TelephonyManager.CALL_STATE_RINGING -> {
+                    val target = CallPrefs.normalizeNumber(prefs.number)
+                    val incoming = CallPrefs.normalizeNumber(phoneNumber)
+                    if (target.isNotEmpty() && incoming.isNotEmpty() && target == incoming) {
+                        if (prefs.automationEnabled && onPinnedTower()) {
+                            if (acceptIncomingCall()) {
+                                isAcceptedIncoming = true
+                                setStatus(getString(R.string.incoming_answered))
+                            } else {
+                                setStatus(getString(R.string.need_default_dialer))
+                            }
+                        } else if (prefs.automationEnabled) {
+                            setStatus(getString(R.string.incoming_ignored))
+                        }
+                    }
+                }
+                TelephonyManager.CALL_STATE_OFFHOOK -> {
+                    if (isOurOutgoingCall || isAcceptedIncoming) {
+                        val seconds = if (isOurOutgoingCall) prefs.outDurationSec else prefs.inDurationSec
+                        handler.removeCallbacks(endCallRunnable)
+                        handler.postDelayed(endCallRunnable, seconds * 1000L)
+                        setStatus("مكالمة جارية — ستنتهي بعد $seconds ثانية")
+                    }
+                }
+                TelephonyManager.CALL_STATE_IDLE -> {
+                    if (prev != TelephonyManager.CALL_STATE_IDLE) {
+                        handler.removeCallbacks(endCallRunnable)
+                        val wasOurs = isOurOutgoingCall || isAcceptedIncoming
+                        isOurOutgoingCall = false
+                        isAcceptedIncoming = false
+                        lastCallEndedMs = System.currentTimeMillis()
+                        if (wasOurs && !singleCallMode && prefs.automationEnabled && prefs.autoRepeat) {
+                            scheduleRedial()
+                        } else if (singleCallMode && !prefs.automationEnabled) {
+                            stopSelf()
+                        }
+                    }
+                }
+            }
+            updateNotification()
+        }
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        prefs = CallPrefs(this)
+        telephony = getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
+        telecom = getSystemService(Context.TELECOM_SERVICE) as TelecomManager
+        createChannel()
+        startForeground(NOTIF_ID, buildNotification(getString(R.string.automation_running)))
+        @Suppress("DEPRECATION")
+        telephony.listen(
+            phoneListener,
+            PhoneStateListener.LISTEN_CELL_INFO or PhoneStateListener.LISTEN_CALL_STATE
+        )
+        refreshServingCell()
+        handler.post(pollRunnable)
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        when (intent?.action) {
+            ACTION_STOP -> {
+                prefs.automationEnabled = false
+                stopSelf()
+                return START_NOT_STICKY
+            }
+            ACTION_CALL_NOW -> {
+                singleCallMode = true
+                if (!placeOutgoingCall()) {
+                    singleCallMode = false
+                }
+            }
+            else -> {
+                singleCallMode = false
+            }
+        }
+        updateNotification()
+        return START_STICKY
+    }
+
+    override fun onDestroy() {
+        handler.removeCallbacks(pollRunnable)
+        handler.removeCallbacks(endCallRunnable)
+        handler.removeCallbacks(redialRunnable)
+        @Suppress("DEPRECATION")
+        telephony.listen(phoneListener, PhoneStateListener.LISTEN_NONE)
+        super.onDestroy()
+    }
+
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    // ---------- البرج ----------
+
+    private fun onPinnedTower(): Boolean {
+        val pinned = prefs.pinnedTowerKey ?: return false
+        val current = servingKey ?: return false
+        return pinned == current
+    }
+
+    private fun refreshServingCell() {
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+            != PackageManager.PERMISSION_GRANTED &&
+            ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION)
+            != PackageManager.PERMISSION_GRANTED
+        ) return
+        try {
+            updateServingFromList(telephony.allCellInfo)
+        } catch (_: SecurityException) {
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun updateServingFromList(cells: List<CellInfo>?) {
+        val serving = CellInfoHelper.servingCell(cells) ?: return
+        val newKey = CellInfoHelper.cellKey(serving)
+        val row = CellInfoHelper.describe(this, serving)
+        val newLabel = "${row.typeLabel} — ${row.bigIdLabel}: ${row.bigIdValue}"
+        val changed = newKey != servingKey
+        val wasOnPinned = onPinnedTower()
+        servingKey = newKey
+        servingLabel = newLabel
+        if (changed) {
+            if (callState == TelephonyManager.CALL_STATE_OFFHOOK && (isOurOutgoingCall || isAcceptedIncoming)) {
+                // تغيّر البرج أثناء المكالمة: افصل فوراً.
+                endCurrentCall()
+                handler.removeCallbacks(endCallRunnable)
+                isOurOutgoingCall = false
+                isAcceptedIncoming = false
+                lastCallEndedMs = System.currentTimeMillis()
+                setStatus(getString(R.string.call_ended_tower))
+            }
+            if (!wasOnPinned && onPinnedTower() && prefs.automationEnabled && prefs.autoRepeat &&
+                callState == TelephonyManager.CALL_STATE_IDLE
+            ) {
+                // عاد إلى البرج المثبّت: أعد الاتصال.
+                scheduleRedial()
+            }
+            updateNotification()
+        }
+    }
+
+    private fun evaluateGate() {
+        if (!prefs.automationEnabled || !prefs.autoRepeat) return
+        if (singleCallMode) return
+        if (callState != TelephonyManager.CALL_STATE_IDLE) return
+        if (dialing) return
+        if (!onPinnedTower()) return
+        val now = System.currentTimeMillis()
+        if (now - lastDialAttemptMs < 5000L) return
+        if (now - lastCallEndedMs < 3000L && lastCallEndedMs != 0L) return
+        placeOutgoingCall()
+    }
+
+    private fun scheduleRedial() {
+        handler.removeCallbacks(redialRunnable)
+        handler.postDelayed(redialRunnable, 3000L)
+    }
+
+    // ---------- المكالمات ----------
+
+    private fun placeOutgoingCall(): Boolean {
+        val number = prefs.number.trim()
+        if (number.isEmpty()) {
+            setStatus(getString(R.string.enter_number_first))
+            return false
+        }
+        if (prefs.pinnedTowerKey.isNullOrEmpty()) {
+            setStatus(getString(R.string.pin_tower_first))
+            return false
+        }
+        if (!onPinnedTower()) {
+            setStatus(getString(R.string.not_on_pinned_tower))
+            return false
+        }
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            setStatus(getString(R.string.need_call_permission))
+            return false
+        }
+        return try {
+            lastDialAttemptMs = System.currentTimeMillis()
+            dialing = true
+            isOurOutgoingCall = true
+            val intent = Intent(Intent.ACTION_CALL, Uri.parse("tel:$number"))
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(intent)
+            setStatus(getString(R.string.dialing))
+            updateNotification()
+            true
+        } catch (e: SecurityException) {
+            dialing = false
+            isOurOutgoingCall = false
+            setStatus(getString(R.string.need_call_permission))
+            false
+        } catch (_: Exception) {
+            dialing = false
+            isOurOutgoingCall = false
+            false
+        }
+    }
+
+    private fun endCurrentCall(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return false
+        return try {
+            telecom.endCall()
+        } catch (_: SecurityException) {
+            setStatus(getString(R.string.need_default_dialer))
+            false
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun acceptIncomingCall(): Boolean {
+        return try {
+            telecom.acceptRingingCall()
+        } catch (_: SecurityException) {
+            setStatus(getString(R.string.need_default_dialer))
+            false
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    // ---------- الحالة والإشعار ----------
+
+    private fun setStatus(text: String) {
+        lastStatus = text
+        val intent = Intent(CallPrefs.ACTION_REFRESH)
+        intent.putExtra(CallPrefs.EXTRA_STATUS, text)
+        intent.setPackage(packageName)
+        sendBroadcast(intent)
+        updateNotification()
+    }
+
+    private fun createChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                getString(R.string.call_settings_title),
+                NotificationManager.IMPORTANCE_LOW
+            )
+            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            nm.createNotificationChannel(channel)
+        }
+    }
+
+    private fun buildNotification(text: String): Notification {
+        val openIntent = Intent(this, CallSettingsActivity::class.java)
+        val pending = PendingIntent.getActivity(
+            this, 0, openIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_menu_call)
+            .setContentTitle(getString(R.string.app_name))
+            .setContentText(text)
+            .setContentIntent(pending)
+            .setOngoing(true)
+            .build()
+    }
+
+    private fun updateNotification() {
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val tower = servingLabel?.let { " | $it" } ?: ""
+        nm.notify(NOTIF_ID, buildNotification(lastStatus + tower))
+    }
+
+    companion object {
+        const val ACTION_STOP = "com.osama.towerscannerplus.STOP"
+        const val ACTION_CALL_NOW = "com.osama.towerscannerplus.CALL_NOW"
+        const val CHANNEL_ID = "call_auto"
+        const val NOTIF_ID = 1001
+        const val POLL_MS = 4000L
+        @Volatile
+        var lastStatus: String = ""
+    }
+}
