@@ -53,6 +53,16 @@ class CallPrefs(context: Context) {
         pendingUntilMs = 0L
     }
 
+    /** نتيجة آخر محاولة ضغط زر (مثل "CALL:ok" أو "CALL:failed"). */
+    var lastClickResult: String
+        get() = prefs.getString(KEY_LAST_CLICK, "") ?: ""
+        set(v) { prefs.edit().putString(KEY_LAST_CLICK, v).apply() }
+
+    /** حتى متى تتوقف محاولات الاتصال التلقائي بعد فشل متكرر (مللي ثانية). */
+    var dialBlockedUntilMs: Long
+        get() = prefs.getLong(KEY_DIAL_BLOCKED_UNTIL, 0L)
+        set(v) { prefs.edit().putLong(KEY_DIAL_BLOCKED_UNTIL, v).apply() }
+
     /** إعادة الاتصال تلقائياً بعد الفصل طالما أنت على البرج المثبّت. */
     var autoRepeat: Boolean
         get() = prefs.getBoolean(KEY_REPEAT, true)
@@ -68,6 +78,8 @@ class CallPrefs(context: Context) {
         const val KEY_REPEAT = "auto_repeat"
         const val KEY_PENDING_ACTION = "pending_action"
         const val KEY_PENDING_UNTIL = "pending_until_ms"
+        const val KEY_LAST_CLICK = "last_click_result"
+        const val KEY_DIAL_BLOCKED_UNTIL = "dial_blocked_until_ms"
 
         /** إجراءات خدمة الوصول المعلّقة. */
         const val PENDING_CALL = "CALL"
