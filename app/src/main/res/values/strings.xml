@@ -60,7 +60,7 @@
     <string name="accessibility_on">خدمة الوصول: مفعّلة ✓</string>
     <string name="accessibility_off">خدمة الوصول: غير مفعّلة — فعّلها ليتم الاتصال والإنهاء والرد تلقائياً</string>
     <string name="need_accessibility">فعّل خدمة الوصول من إعدادات الاتصال ليتم الإنهاء والرد تلقائياً من تطبيق الهاتف.</string>
-    <string name="auto_call_failed">تعذّر الاتصال التلقائي — زر الاتصال لم يُضغط. فعّل خدمة الوصول من إعدادات الاتصال ثم أعد تفعيل الأتمتة.</string>
+    <string name="auto_call_failed">تعذّر بدء الاتصال التلقائي — تحقق من إذن الاتصال (CALL_PHONE) وأن الرقم محفوظ. ستعاد المحاولة بعد قليل.</string>
     <string name="accessibility_dialog_title">خدمة الوصول غير مفعّلة</string>
     <string name="accessibility_dialog_message">لن يبدأ الاتصال تلقائياً حتى تفعّل خدمة الوصول: ستفتح الآن إعدادات الوصول في الهاتف — اختر «التطبيقات المثبّتة» ثم TowerScanner وفعّل الخدمة، ثم عُد إلى هنا وفعّل الأتمتة. إن ظهر أن الخيار مقيّد ولا يمكن تفعيله، فهذا لأن التطبيق مثبّت من خارج متجر Play: اذهب أولاً إلى إعدادات الهاتف ← التطبيقات ← TowerScanner ← النقاط الثلاث أعلى الشاشة ← «السماح بالإعدادات المقيّدة»، ثم فعّل الخدمة.</string>
     <string name="enable_accessibility_now">فتح إعدادات الوصول</string>
@@ -82,4 +82,5 @@
     <string name="incoming_ignored">مكالمة واردة من الرقم المحدد لكنك لست على البرج المثبّت — لم يتم الرد</string>
     <string name="automation_running">الأتمتة تعمل في الخلفية</string>
     <string name="automation_stopped">الأتمتة متوقفة</string>
+    <string name="need_answer_permission">امنح التطبيق إذن «الرد على المكالمات» من إعدادات التطبيق ← الأذونات (أو فعّل خدمة الوصول) ليتم الرد والفصل تلقائياً.</string>
 </resources>
