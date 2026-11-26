@@ -103,10 +103,6 @@ class CallSettingsActivity : AppCompatActivity() {
                     }
                     startAutomationService()
                     findViewById<TextView>(R.id.tvStatus).text = getString(R.string.automation_running)
-                    // تنبيه واضح مرة واحدة: بدون خدمة الوصول لن يُضغط زر الاتصال.
-                    if (!CallPrefs.isAccessibilityEnabled(this)) {
-                        showAccessibilityDialog()
-                    }
                 } else {
                     pendingAutomation = false
                     stopAutomationService()
@@ -155,10 +151,6 @@ class CallSettingsActivity : AppCompatActivity() {
         updatingSwitch = false
         val last = CallAutomationService.lastStatus
         if (last.isNotEmpty()) findViewById<TextView>(R.id.tvStatus).text = last
-        // تنبيه واضح: الأتمتة مفعّلة لكن خدمة الوصول متوقفة فلن يُضغط زر الاتصال.
-        if (prefs.automationEnabled && !CallPrefs.isAccessibilityEnabled(this)) {
-            findViewById<TextView>(R.id.tvStatus).text = getString(R.string.need_accessibility)
-        }
         val filter = IntentFilter(CallPrefs.ACTION_REFRESH)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(statusReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
@@ -238,7 +230,7 @@ class CallSettingsActivity : AppCompatActivity() {
         Toast.makeText(this, getString(R.string.tower_pinned), Toast.LENGTH_SHORT).show()
     }
 
-    /** الأتمتة تحتاج الموقع وحالة الهاتف وإذن إجراء المكالمات — لا تطبيق افتراضي. */
+    /** الأتمتة تحتاج الموقع وحالة الهاتف وإذن الاتصال (الرد/الفصل/رقم المتصل تُطلب معها). */
     private fun hasAutomationPermissions(): Boolean {
         val loc = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
             PackageManager.PERMISSION_GRANTED ||
@@ -259,8 +251,10 @@ class CallSettingsActivity : AppCompatActivity() {
                 Manifest.permission.ACCESS_FINE_LOCATION,
                 Manifest.permission.ACCESS_COARSE_LOCATION,
                 Manifest.permission.READ_PHONE_STATE,
-                Manifest.permission.CALL_PHONE
-            ),
+                Manifest.permission.CALL_PHONE,
+                Manifest.permission.ANSWER_PHONE_CALLS,
+                Manifest.permission.READ_CALL_LOG
+            ) + (if (Build.VERSION.SDK_INT >= 33) arrayOf(Manifest.permission.POST_NOTIFICATIONS) else emptyArray<String>()),
             REQ_CALL_PERM
         )
         Toast.makeText(this, getString(R.string.need_permission), Toast.LENGTH_SHORT).show()
@@ -298,10 +292,7 @@ class CallSettingsActivity : AppCompatActivity() {
         }
         prefs.lastClickResult = ""
         prefs.setPending(CallPrefs.PENDING_CALL, 20000L)
-        try {
-            startService(Intent(this, CallAccessibilityService::class.java))
-        } catch (_: Exception) {
-        }
+        CallAccessibilityService.instance?.kick()
         try {
             val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$number"))
             startActivity(intent)
