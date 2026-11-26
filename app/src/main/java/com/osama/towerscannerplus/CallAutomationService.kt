@@ -318,7 +318,9 @@ class CallAutomationService : Service() {
 
     private fun acceptIncomingCall(): Boolean {
         return try {
+            // acceptRingingCall ترجع Unit وليست Boolean، لذلك نرجع true بعد نجاحها.
             telecom.acceptRingingCall()
+            true
         } catch (_: SecurityException) {
             setStatus(getString(R.string.need_default_dialer))
             false
