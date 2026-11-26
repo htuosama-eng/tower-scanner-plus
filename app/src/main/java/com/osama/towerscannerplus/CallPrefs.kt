@@ -33,6 +33,26 @@ class CallPrefs(context: Context) {
         get() = prefs.getBoolean(KEY_ENABLED, false)
         set(v) { prefs.edit().putBoolean(KEY_ENABLED, v).apply() }
 
+    /** إجراء معلّق لخدمة الوصول: CALL أو END أو ANSWER، أو "" بلا إجراء. */
+    var pendingAction: String
+        get() = prefs.getString(KEY_PENDING_ACTION, "") ?: ""
+        set(v) { prefs.edit().putString(KEY_PENDING_ACTION, v).apply() }
+
+    /** آخر لحظة صالحة للإجراء المعلق (مللي ثانية). */
+    var pendingUntilMs: Long
+        get() = prefs.getLong(KEY_PENDING_UNTIL, 0L)
+        set(v) { prefs.edit().putLong(KEY_PENDING_UNTIL, v).apply() }
+
+    fun setPending(action: String, validMs: Long) {
+        pendingAction = action
+        pendingUntilMs = System.currentTimeMillis() + validMs
+    }
+
+    fun clearPending() {
+        pendingAction = ""
+        pendingUntilMs = 0L
+    }
+
     /** إعادة الاتصال تلقائياً بعد الفصل طالما أنت على البرج المثبّت. */
     var autoRepeat: Boolean
         get() = prefs.getBoolean(KEY_REPEAT, true)
@@ -46,6 +66,26 @@ class CallPrefs(context: Context) {
         const val KEY_PINNED_LABEL = "pinned_tower_label"
         const val KEY_ENABLED = "automation_enabled"
         const val KEY_REPEAT = "auto_repeat"
+        const val KEY_PENDING_ACTION = "pending_action"
+        const val KEY_PENDING_UNTIL = "pending_until_ms"
+
+        /** إجراءات خدمة الوصول المعلّقة. */
+        const val PENDING_CALL = "CALL"
+        const val PENDING_END = "END"
+        const val PENDING_ANSWER = "ANSWER"
+
+        /** هل خدمة الوصول الخاصة بالتطبيق مفعّلة في إعدادات الهاتف؟ */
+        fun isAccessibilityEnabled(context: Context): Boolean {
+            return try {
+                val enabled = android.provider.Settings.Secure.getString(
+                    context.contentResolver,
+                    android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+                ) ?: return false
+                enabled.contains("CallAccessibilityService")
+            } catch (_: Exception) {
+                false
+            }
+        }
 
         const val ACTION_REFRESH = "com.osama.towerscannerplus.CALL_STATUS_REFRESH"
         const val EXTRA_STATUS = "status"
