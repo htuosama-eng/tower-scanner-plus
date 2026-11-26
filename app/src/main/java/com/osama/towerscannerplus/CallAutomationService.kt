@@ -45,6 +45,7 @@ class CallAutomationService : Service() {
     private var callState: Int = TelephonyManager.CALL_STATE_IDLE
     private var isOurOutgoingCall = false
     private var isAcceptedIncoming = false
+    private var isManagedCall = false
     private var singleCallMode = false
     private var lastDialAttemptMs = 0L
     private var lastCallEndedMs = 0L
@@ -80,6 +81,7 @@ class CallAutomationService : Service() {
         setStatus(reason)
         isOurOutgoingCall = false
         isAcceptedIncoming = false
+        isManagedCall = false
         lastCallEndedMs = System.currentTimeMillis()
         if (!singleCallMode && prefs.automationEnabled && prefs.autoRepeat) {
             scheduleRedial()
@@ -123,8 +125,15 @@ class CallAutomationService : Service() {
                     }
                 }
                 TelephonyManager.CALL_STATE_OFFHOOK -> {
-                    if (isOurOutgoingCall || isAcceptedIncoming) {
-                        val seconds = if (isOurOutgoingCall) prefs.outDurationSec else prefs.inDurationSec
+                    // مكالمة بدأت: أدرها إن كانت من التطبيق أو واردة رددنا عليها،
+                    // أو أي مكالمة ونحن على البرج المثبّت والأتمتة مفعّلة
+                    // (مثل اتصال يدوي بالرقم المحفوظ): تنتهي بعد المدة المحددة
+                    // ثم يعاد الاتصال تلقائياً.
+                    val managed = isOurOutgoingCall || isAcceptedIncoming ||
+                        (prefs.automationEnabled && onPinnedTower())
+                    if (managed) {
+                        isManagedCall = true
+                        val seconds = if (isAcceptedIncoming) prefs.inDurationSec else prefs.outDurationSec
                         handler.removeCallbacks(endCallRunnable)
                         handler.postDelayed(endCallRunnable, seconds * 1000L)
                         setStatus("مكالمة جارية — ستنتهي بعد $seconds ثانية")
@@ -133,9 +142,10 @@ class CallAutomationService : Service() {
                 TelephonyManager.CALL_STATE_IDLE -> {
                     if (prev != TelephonyManager.CALL_STATE_IDLE) {
                         handler.removeCallbacks(endCallRunnable)
-                        val wasOurs = isOurOutgoingCall || isAcceptedIncoming
+                        val wasOurs = isOurOutgoingCall || isAcceptedIncoming || isManagedCall
                         isOurOutgoingCall = false
                         isAcceptedIncoming = false
+                        isManagedCall = false
                         lastCallEndedMs = System.currentTimeMillis()
                         if (wasOurs && !singleCallMode && prefs.automationEnabled && prefs.autoRepeat) {
                             scheduleRedial()
@@ -237,12 +247,13 @@ class CallAutomationService : Service() {
         servingKey = newKey
         servingLabel = newLabel
         if (changed) {
-            if (callState == TelephonyManager.CALL_STATE_OFFHOOK && (isOurOutgoingCall || isAcceptedIncoming)) {
+            if (callState == TelephonyManager.CALL_STATE_OFFHOOK && isManagedCall) {
                 // تغيّر البرج أثناء المكالمة: افصل فوراً.
                 endCurrentCall()
                 handler.removeCallbacks(endCallRunnable)
                 isOurOutgoingCall = false
                 isAcceptedIncoming = false
+                isManagedCall = false
                 lastCallEndedMs = System.currentTimeMillis()
                 setStatus(getString(R.string.call_ended_tower))
             }
