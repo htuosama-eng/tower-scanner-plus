@@ -145,6 +145,10 @@ class CallSettingsActivity : AppCompatActivity() {
         updatingSwitch = false
         val last = CallAutomationService.lastStatus
         if (last.isNotEmpty()) findViewById<TextView>(R.id.tvStatus).text = last
+        // تنبيه واضح: الأتمتة مفعّلة لكن خدمة الوصول متوقفة فلن يُضغط زر الاتصال.
+        if (prefs.automationEnabled && !CallPrefs.isAccessibilityEnabled(this)) {
+            findViewById<TextView>(R.id.tvStatus).text = getString(R.string.need_accessibility)
+        }
         val filter = IntentFilter(CallPrefs.ACTION_REFRESH)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(statusReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
