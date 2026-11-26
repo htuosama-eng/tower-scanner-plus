@@ -72,6 +72,8 @@ class MainActivity : AppCompatActivity() {
             handler.removeCallbacks(autoRunnable)
             if (checked) handler.post(autoRunnable)
         }
+        // التحديث التلقائي يعمل من نفسه منذ فتح التطبيق، كل ثانية، دون زر يدوي.
+        findViewById<ToggleButton>(R.id.tglAuto).isChecked = true
 
         if (!hasPermissions()) {
             showPermissionScreen()
@@ -84,6 +86,10 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         updatePinnedText()
         if (hasPermissions()) refreshCells()
+        if (autoTick) {
+            handler.removeCallbacks(autoRunnable)
+            handler.post(autoRunnable)
+        }
     }
 
     override fun onDestroy() {
