@@ -238,7 +238,7 @@ class CallSettingsActivity : AppCompatActivity() {
         Toast.makeText(this, getString(R.string.tower_pinned), Toast.LENGTH_SHORT).show()
     }
 
-    /** الأتمتة تحتاج فقط الموقع وحالة الهاتف — لا إذن اتصال ولا تطبيق افتراضي. */
+    /** الأتمتة تحتاج الموقع وحالة الهاتف وإذن إجراء المكالمات — لا تطبيق افتراضي. */
     private fun hasAutomationPermissions(): Boolean {
         val loc = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
             PackageManager.PERMISSION_GRANTED ||
@@ -246,7 +246,9 @@ class CallSettingsActivity : AppCompatActivity() {
             PackageManager.PERMISSION_GRANTED
         val phone = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) ==
             PackageManager.PERMISSION_GRANTED
-        return loc && phone
+        val call = ContextCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE) ==
+            PackageManager.PERMISSION_GRANTED
+        return loc && phone && call
     }
 
     private fun ensureAutomationPermissions(): Boolean {
@@ -256,7 +258,8 @@ class CallSettingsActivity : AppCompatActivity() {
             arrayOf(
                 Manifest.permission.ACCESS_FINE_LOCATION,
                 Manifest.permission.ACCESS_COARSE_LOCATION,
-                Manifest.permission.READ_PHONE_STATE
+                Manifest.permission.READ_PHONE_STATE,
+                Manifest.permission.CALL_PHONE
             ),
             REQ_CALL_PERM
         )
