@@ -60,6 +60,7 @@
     <string name="accessibility_on">خدمة الوصول: مفعّلة ✓</string>
     <string name="accessibility_off">خدمة الوصول: غير مفعّلة — فعّلها ليتم الاتصال والإنهاء والرد تلقائياً</string>
     <string name="need_accessibility">فعّل خدمة الوصول من إعدادات الاتصال ليتم الإنهاء والرد تلقائياً من تطبيق الهاتف.</string>
+    <string name="auto_call_failed">تعذّر الاتصال التلقائي — زر الاتصال لم يُضغط. فعّل خدمة الوصول من إعدادات الاتصال ثم أعد تفعيل الأتمتة.</string>
     <string name="automation_start_failed">تعذّر تشغيل الأتمتة — جرّب إغلاق التطبيق وإعادة فتحه ثم فعّلها مرة أخرى.</string>
     <string name="status">الحالة</string>
     <string name="call_status_idle">متوقف</string>
