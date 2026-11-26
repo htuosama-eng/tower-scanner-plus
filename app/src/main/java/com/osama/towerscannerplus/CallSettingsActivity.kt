@@ -1,13 +1,17 @@
 package com.osama.towerscannerplus
 
 import android.Manifest
+import android.app.AlertDialog
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.telephony.CellInfo
 import android.telephony.TelephonyManager
@@ -99,6 +103,10 @@ class CallSettingsActivity : AppCompatActivity() {
                     }
                     startAutomationService()
                     findViewById<TextView>(R.id.tvStatus).text = getString(R.string.automation_running)
+                    // تنبيه واضح مرة واحدة: بدون خدمة الوصول لن يُضغط زر الاتصال.
+                    if (!CallPrefs.isAccessibilityEnabled(this)) {
+                        showAccessibilityDialog()
+                    }
                 } else {
                     pendingAutomation = false
                     stopAutomationService()
@@ -124,6 +132,8 @@ class CallSettingsActivity : AppCompatActivity() {
             intent.action = CallAutomationService.ACTION_CALL_NOW
             startServiceCompat(intent)
         }
+
+        findViewById<Button>(R.id.btnTestCall).setOnClickListener { testAutoCall() }
 
         findViewById<Button>(R.id.btnStop).setOnClickListener {
             prefs.automationEnabled = false
@@ -252,6 +262,61 @@ class CallSettingsActivity : AppCompatActivity() {
         )
         Toast.makeText(this, getString(R.string.need_permission), Toast.LENGTH_SHORT).show()
         return false
+    }
+
+    private fun showAccessibilityDialog() {
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.accessibility_dialog_title))
+            .setMessage(getString(R.string.accessibility_dialog_message))
+            .setPositiveButton(getString(R.string.enable_accessibility_now)) { _, _ ->
+                try {
+                    startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                } catch (_: Exception) {
+                    Toast.makeText(this, getString(R.string.unavailable), Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton(getString(R.string.later), null)
+            .show()
+    }
+
+    /**
+     * اختبار الضغط التلقائي: يفتح شاشة الاتصال بالرقم المحفوظ ويحاول ضغط
+     * زر الاتصال، ثم يعرض النتيجة بعد 6 ثوانٍ (مكالمة حقيقية بالرقم المحفوظ).
+     */
+    private fun testAutoCall() {
+        val number = prefs.number.trim()
+        if (number.isEmpty()) {
+            Toast.makeText(this, getString(R.string.enter_number_first), Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (!CallPrefs.isAccessibilityEnabled(this)) {
+            showAccessibilityDialog()
+            return
+        }
+        prefs.lastClickResult = ""
+        prefs.setPending(CallPrefs.PENDING_CALL, 20000L)
+        try {
+            startService(Intent(this, CallAccessibilityService::class.java))
+        } catch (_: Exception) {
+        }
+        try {
+            val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$number"))
+            startActivity(intent)
+        } catch (_: Exception) {
+            Toast.makeText(this, getString(R.string.unavailable), Toast.LENGTH_SHORT).show()
+            return
+        }
+        findViewById<TextView>(R.id.tvStatus).text = getString(R.string.dialing)
+        Handler(Looper.getMainLooper()).postDelayed({
+            val result = prefs.lastClickResult
+            val text = if (result == "CALL:ok") {
+                getString(R.string.test_click_ok)
+            } else {
+                getString(R.string.test_click_failed)
+            }
+            findViewById<TextView>(R.id.tvStatus).text = text
+            Toast.makeText(this, text, Toast.LENGTH_LONG).show()
+        }, 6000L)
     }
 
     private fun startAutomationService() {
