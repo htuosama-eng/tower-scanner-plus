@@ -66,6 +66,9 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(R.id.btnCallSettings).setOnClickListener {
             startActivity(Intent(this, CallSettingsActivity::class.java))
         }
+        findViewById<TextView>(R.id.tvAccessWarning).setOnClickListener {
+            startActivity(Intent(this, CallSettingsActivity::class.java))
+        }
         findViewById<Button>(R.id.btnPinTower).setOnClickListener { pinServingTower() }
         findViewById<ToggleButton>(R.id.tglAuto).setOnCheckedChangeListener { _, checked ->
             autoTick = checked
@@ -85,6 +88,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         updatePinnedText()
+        updateAccessWarning()
         if (hasPermissions()) refreshCells()
         if (autoTick) {
             handler.removeCallbacks(autoRunnable)
@@ -225,6 +229,13 @@ class MainActivity : AppCompatActivity() {
         prefs.pinnedTowerLabel = "${serving.typeLabel} — ${serving.bigIdLabel}: ${serving.bigIdValue}"
         updatePinnedText()
         Toast.makeText(this, getString(R.string.tower_pinned), Toast.LENGTH_SHORT).show()
+    }
+
+    /** تنبيه أحمر في الشاشة الرئيسية إن كانت الأتمتة مفعّلة وخدمة الوصول متوقفة. */
+    private fun updateAccessWarning() {
+        val warning = findViewById<TextView>(R.id.tvAccessWarning)
+        val show = prefs.automationEnabled && !CallPrefs.isAccessibilityEnabled(this)
+        warning.visibility = if (show) View.VISIBLE else View.GONE
     }
 
     private fun updatePinnedText() {
