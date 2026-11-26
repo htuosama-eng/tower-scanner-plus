@@ -234,7 +234,10 @@ class MainActivity : AppCompatActivity() {
     /** تنبيه أحمر في الشاشة الرئيسية إن كانت الأتمتة مفعّلة وخدمة الوصول متوقفة. */
     private fun updateAccessWarning() {
         val warning = findViewById<TextView>(R.id.tvAccessWarning)
-        val show = prefs.automationEnabled && !CallPrefs.isAccessibilityEnabled(this)
+        val answerOk = Build.VERSION.SDK_INT < Build.VERSION_CODES.P ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ANSWER_PHONE_CALLS) ==
+            PackageManager.PERMISSION_GRANTED
+        val show = prefs.automationEnabled && !answerOk && !CallPrefs.isAccessibilityEnabled(this)
         warning.visibility = if (show) View.VISIBLE else View.GONE
     }
 
