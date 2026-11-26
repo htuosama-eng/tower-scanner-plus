@@ -7,6 +7,7 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
 
     <uses-feature android:name="android.hardware.telephony" android:required="true" />
 
@@ -32,7 +33,7 @@
         <service
             android:name=".CallAutomationService"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
+            android:foregroundServiceType="location|dataSync" />
 
         <!-- خدمة الوصول: تضغط أزرار تطبيق الهاتف (اتصال/إنهاء/رد) فيتم الاتصال
              من تطبيق الهاتف نفسه، دون إذن اتصال ودون تعيين تطبيق افتراضي. -->
