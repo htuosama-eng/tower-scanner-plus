@@ -32,7 +32,9 @@ data class CellRow(
     val bigIdLabel: String,
     val bigIdValue: String,
     val quality: String,
-    val dbm: Int
+    val dbm: Int,
+    /** مستوى قوة الإشارة من 0 إلى 4 لأشرطة العرض. */
+    val signalLevel: Int = 0
 )
 
 object CellInfoHelper {
@@ -138,6 +140,7 @@ object CellInfoHelper {
         }
         val signalText = if (dbm != Int.MIN_VALUE) "$dbm dBm" else "-"
         val quality = qualityLabel(dbm)
+        val level = signalLevel(dbm)
         val badge = if (info.isRegistered) context.getString(R.string.serving)
             else context.getString(R.string.neighbor)
         return CellRow(
@@ -151,7 +154,8 @@ object CellInfoHelper {
             bigIdLabel = bigLabel,
             bigIdValue = bigValue,
             quality = quality,
-            dbm = dbm
+            dbm = dbm,
+            signalLevel = level
         )
     }
 
@@ -167,6 +171,18 @@ object CellInfoHelper {
             dbm >= -105 -> "متوسطة"
             dbm >= -115 -> "ضعيفة"
             else -> "ضعيفة جداً"
+        }
+    }
+
+    /** مستوى قوة الإشارة من 0 إلى 4 حسب dBm. */
+    fun signalLevel(dbm: Int): Int {
+        if (dbm == Int.MIN_VALUE) return 0
+        return when {
+            dbm >= -70 -> 4
+            dbm >= -85 -> 3
+            dbm >= -95 -> 2
+            dbm >= -105 -> 1
+            else -> 0
         }
     }
 
