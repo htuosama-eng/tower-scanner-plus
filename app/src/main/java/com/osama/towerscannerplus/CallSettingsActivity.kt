@@ -1,7 +1,6 @@
 package com.osama.towerscannerplus
 
 import android.Manifest
-import android.app.role.RoleManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -9,7 +8,7 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import android.telecom.TelecomManager
+import android.provider.Settings
 import android.telephony.CellInfo
 import android.telephony.TelephonyManager
 import android.widget.Button
@@ -18,6 +17,7 @@ import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 
@@ -25,6 +25,8 @@ class CallSettingsActivity : AppCompatActivity() {
 
     private lateinit var prefs: CallPrefs
     private lateinit var telephony: TelephonyManager
+    private var updatingSwitch = false
+    private var pendingAutomation = false
 
     private val statusReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -34,6 +36,7 @@ class CallSettingsActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_call_settings)
         prefs = CallPrefs(this)
@@ -73,19 +76,42 @@ class CallSettingsActivity : AppCompatActivity() {
             Toast.makeText(this, getString(R.string.tower_unpinned), Toast.LENGTH_SHORT).show()
         }
 
+        findViewById<Button>(R.id.btnAccessibility).setOnClickListener {
+            try {
+                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            } catch (_: Exception) {
+                Toast.makeText(this, getString(R.string.unavailable), Toast.LENGTH_SHORT).show()
+            }
+        }
+
         findViewById<Switch>(R.id.swAutomation).setOnCheckedChangeListener { _, checked ->
-            prefs.automationEnabled = checked
-            if (checked) {
-                if (!ensureCallPermissions()) {
-                    findViewById<Switch>(R.id.swAutomation).isChecked = false
-                    prefs.automationEnabled = false
-                    return@setOnCheckedChangeListener
+            if (updatingSwitch) return@setOnCheckedChangeListener
+            try {
+                prefs.automationEnabled = checked
+                if (checked) {
+                    if (!ensureAutomationPermissions()) {
+                        pendingAutomation = true
+                        updatingSwitch = true
+                        findViewById<Switch>(R.id.swAutomation).isChecked = false
+                        updatingSwitch = false
+                        prefs.automationEnabled = false
+                        return@setOnCheckedChangeListener
+                    }
+                    startAutomationService()
+                    findViewById<TextView>(R.id.tvStatus).text = getString(R.string.automation_running)
+                } else {
+                    pendingAutomation = false
+                    stopAutomationService()
+                    findViewById<TextView>(R.id.tvStatus).text = getString(R.string.automation_stopped)
                 }
-                startAutomationService()
-                findViewById<TextView>(R.id.tvStatus).text = getString(R.string.automation_running)
-            } else {
-                stopAutomationService()
-                findViewById<TextView>(R.id.tvStatus).text = getString(R.string.automation_stopped)
+            } catch (_: Exception) {
+                // لا يُغلق التطبيق أبداً بسبب مفتاح الأتمتة: أظهر رسالة وأعد المفتاح.
+                pendingAutomation = false
+                updatingSwitch = true
+                findViewById<Switch>(R.id.swAutomation).isChecked = false
+                updatingSwitch = false
+                prefs.automationEnabled = false
+                Toast.makeText(this, getString(R.string.automation_start_failed), Toast.LENGTH_LONG).show()
             }
         }
 
@@ -94,7 +120,6 @@ class CallSettingsActivity : AppCompatActivity() {
         }
 
         findViewById<Button>(R.id.btnCallNow).setOnClickListener {
-            if (!ensureCallPermissions()) return@setOnClickListener
             val intent = Intent(this, CallAutomationService::class.java)
             intent.action = CallAutomationService.ACTION_CALL_NOW
             startServiceCompat(intent)
@@ -102,19 +127,22 @@ class CallSettingsActivity : AppCompatActivity() {
 
         findViewById<Button>(R.id.btnStop).setOnClickListener {
             prefs.automationEnabled = false
+            updatingSwitch = true
             findViewById<Switch>(R.id.swAutomation).isChecked = false
+            updatingSwitch = false
             stopAutomationService()
             findViewById<TextView>(R.id.tvStatus).text = getString(R.string.automation_stopped)
         }
-
-        findViewById<Button>(R.id.btnDefaultDialer).setOnClickListener { requestDefaultDialer() }
     }
 
     override fun onResume() {
         super.onResume()
         refreshPinnedText()
+        refreshAccessibilityText()
+        updatingSwitch = true
         findViewById<Switch>(R.id.swAutomation).isChecked = prefs.automationEnabled
         findViewById<Switch>(R.id.swRepeat).isChecked = prefs.autoRepeat
+        updatingSwitch = false
         val last = CallAutomationService.lastStatus
         if (last.isNotEmpty()) findViewById<TextView>(R.id.tvStatus).text = last
         val filter = IntentFilter(CallPrefs.ACTION_REFRESH)
@@ -134,11 +162,27 @@ class CallSettingsActivity : AppCompatActivity() {
         }
     }
 
+    override fun onRequestPermissionsResult(
+        requestCode: Int, permissions: Array<out String>, grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQ_CALL_PERM && pendingAutomation && hasAutomationPermissions()) {
+            pendingAutomation = false
+            findViewById<Switch>(R.id.swAutomation).isChecked = true
+        }
+    }
+
     private fun refreshPinnedText() {
         val label = prefs.pinnedTowerLabel
         findViewById<TextView>(R.id.tvPinnedTower).text =
             if (label.isNullOrEmpty()) getString(R.string.no_pinned_tower)
             else "${getString(R.string.pinned_tower)}: $label"
+    }
+
+    private fun refreshAccessibilityText() {
+        val on = CallPrefs.isAccessibilityEnabled(this)
+        findViewById<TextView>(R.id.tvAccessibilityStatus).text =
+            if (on) getString(R.string.accessibility_on) else getString(R.string.accessibility_off)
     }
 
     private fun pinCurrentTower() {
@@ -180,22 +224,29 @@ class CallSettingsActivity : AppCompatActivity() {
         Toast.makeText(this, getString(R.string.tower_pinned), Toast.LENGTH_SHORT).show()
     }
 
-    private fun ensureCallPermissions(): Boolean {
-        val needed = mutableListOf(
-            Manifest.permission.CALL_PHONE,
-            Manifest.permission.ANSWER_PHONE_CALLS,
-            Manifest.permission.READ_PHONE_STATE,
-            Manifest.permission.ACCESS_FINE_LOCATION
+    /** الأتمتة تحتاج فقط الموقع وحالة الهاتف — لا إذن اتصال ولا تطبيق افتراضي. */
+    private fun hasAutomationPermissions(): Boolean {
+        val loc = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+        val phone = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) ==
+            PackageManager.PERMISSION_GRANTED
+        return loc && phone
+    }
+
+    private fun ensureAutomationPermissions(): Boolean {
+        if (hasAutomationPermissions()) return true
+        ActivityCompat.requestPermissions(
+            this,
+            arrayOf(
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION,
+                Manifest.permission.READ_PHONE_STATE
+            ),
+            REQ_CALL_PERM
         )
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            needed.add(Manifest.permission.POST_NOTIFICATIONS)
-        }
-        val missing = needed.filter {
-            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
-        }
-        if (missing.isEmpty()) return true
-        ActivityCompat.requestPermissions(this, missing.toTypedArray(), REQ_CALL_PERM)
-        Toast.makeText(this, getString(R.string.need_call_permission), Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, getString(R.string.need_permission), Toast.LENGTH_SHORT).show()
         return false
     }
 
@@ -205,10 +256,14 @@ class CallSettingsActivity : AppCompatActivity() {
     }
 
     private fun startServiceCompat(intent: Intent) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent)
-        } else {
-            startService(intent)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(intent)
+            } else {
+                startService(intent)
+            }
+        } catch (_: Exception) {
+            Toast.makeText(this, getString(R.string.automation_start_failed), Toast.LENGTH_LONG).show()
         }
     }
 
@@ -218,51 +273,15 @@ class CallSettingsActivity : AppCompatActivity() {
         try {
             startService(intent)
         } catch (_: Exception) {
-            stopService(Intent(this, CallAutomationService::class.java))
-        }
-    }
-
-    private fun requestDefaultDialer() {
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                val roleManager = getSystemService(RoleManager::class.java)
-                if (roleManager != null && roleManager.isRoleAvailable(RoleManager.ROLE_DIALER)) {
-                    startActivityForResult(
-                        roleManager.createRequestRoleIntent(RoleManager.ROLE_DIALER),
-                        REQ_DIALER_ROLE
-                    )
-                    return
-                }
+            try {
+                stopService(Intent(this, CallAutomationService::class.java))
+            } catch (_: Exception) {
             }
-            val intent = Intent(TelecomManager.ACTION_CHANGE_DEFAULT_DIALER)
-            intent.putExtra(
-                TelecomManager.EXTRA_CHANGE_DEFAULT_DIALER_PACKAGE_NAME,
-                packageName
-            )
-            startActivity(intent)
-        } catch (_: Exception) {
-            Toast.makeText(this, getString(R.string.unavailable), Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    @Deprecated("Deprecated in Java")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == REQ_DIALER_ROLE) {
-            val tm = getSystemService(TELECOM_SERVICE) as TelecomManager
-            val isDefault = tm.defaultDialerPackage == packageName
-            Toast.makeText(
-                this,
-                if (isDefault) "تم تعيين التطبيق كتطبيق الهاتف الافتراضي"
-                else "لم يتم التعيين — جرّب مرة أخرى من إعدادات الهاتف",
-                Toast.LENGTH_LONG
-            ).show()
         }
     }
 
     companion object {
         const val REQ_PERM = 1002
         const val REQ_CALL_PERM = 1003
-        const val REQ_DIALER_ROLE = 1004
     }
 }
