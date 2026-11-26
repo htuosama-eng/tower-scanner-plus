@@ -1,7 +1,6 @@
 package com.osama.towerscannerplus
 
 import android.accessibilityservice.AccessibilityService
-import android.content.Intent
 import android.os.Handler
 import android.os.Looper
 import android.view.accessibility.AccessibilityEvent
@@ -43,9 +42,14 @@ class CallAccessibilityService : AccessibilityService() {
         }
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        kickLoop()
-        return START_STICKY
+    override fun onServiceConnected() {
+        super.onServiceConnected()
+        instance = this
+    }
+
+    /** تُستدعى من خدمة الأتمتة لبدء محاولة الضغط فوراً. */
+    fun kick() {
+        handler.post { kickLoop() }
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -59,6 +63,7 @@ class CallAccessibilityService : AccessibilityService() {
     override fun onInterrupt() {}
 
     override fun onDestroy() {
+        if (instance === this) instance = null
         handler.removeCallbacks(retryRunnable)
         super.onDestroy()
     }
@@ -176,6 +181,9 @@ class CallAccessibilityService : AccessibilityService() {
     }
 
     companion object {
+        @Volatile
+        var instance: CallAccessibilityService? = null
+
         val CALL_WORDS = listOf("اتصال", "call", "dial")
         val END_WORDS = listOf("إنهاء", "end call", "end")
         val ANSWER_WORDS = listOf("رد", "answer", "accept", "قبول")
