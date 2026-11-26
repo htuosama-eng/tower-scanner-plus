@@ -12,11 +12,13 @@ import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.telecom.TelecomManager
 import android.telephony.CellInfo
+import androidx.core.content.ContextCompat
 import android.telephony.PhoneStateListener
 import android.telephony.TelephonyManager
 import androidx.core.app.ActivityCompat
@@ -41,6 +43,8 @@ class CallAutomationService : Service() {
     private val handler = Handler(Looper.getMainLooper())
 
     private var servingKey: String? = null
+    private var registeredKeys: Set<String> = emptySet()
+    private var lastCellUpdateReqMs = 0L
     private var servingLabel: String? = null
     private var callState: Int = TelephonyManager.CALL_STATE_IDLE
     private var isOurOutgoingCall = false
@@ -63,7 +67,7 @@ class CallAutomationService : Service() {
                 dialing = false
                 isOurOutgoingCall = false
                 prefs.clearPending()
-                prefs.dialBlockedUntilMs = System.currentTimeMillis() + 60000L
+                prefs.dialBlockedUntilMs = System.currentTimeMillis() + 15000L
                 setStatus(getString(R.string.auto_call_failed))
             }
             evaluateGate()
@@ -117,7 +121,7 @@ class CallAutomationService : Service() {
                                 isAcceptedIncoming = true
                                 setStatus(getString(R.string.incoming_answered))
                             } else {
-                                setStatus(getString(R.string.need_accessibility))
+                                setStatus(getString(R.string.need_answer_permission))
                             }
                         } else if (prefs.automationEnabled) {
                             setStatus(getString(R.string.incoming_ignored))
@@ -131,6 +135,7 @@ class CallAutomationService : Service() {
                     // ثم يعاد الاتصال تلقائياً.
                     val managed = isOurOutgoingCall || isAcceptedIncoming ||
                         (prefs.automationEnabled && onPinnedTower())
+                    dialing = false
                     if (managed) {
                         isManagedCall = true
                         val seconds = if (isAcceptedIncoming) prefs.inDurationSec else prefs.outDurationSec
@@ -140,7 +145,10 @@ class CallAutomationService : Service() {
                     }
                 }
                 TelephonyManager.CALL_STATE_IDLE -> {
+                    if (prev == TelephonyManager.CALL_STATE_IDLE && dialing &&
+                        System.currentTimeMillis() - lastDialAttemptMs > 12000L) dialing = false
                     if (prev != TelephonyManager.CALL_STATE_IDLE) {
+                        dialing = false
                         handler.removeCallbacks(endCallRunnable)
                         val wasOurs = isOurOutgoingCall || isAcceptedIncoming || isManagedCall
                         isOurOutgoingCall = false
@@ -192,7 +200,7 @@ class CallAutomationService : Service() {
                 return START_NOT_STICKY
             }
             ACTION_CALL_NOW -> {
-                singleCallMode = true
+                singleCallMode = !prefs.automationEnabled
                 if (!placeOutgoingCall()) {
                     singleCallMode = false
                 }
@@ -220,8 +228,8 @@ class CallAutomationService : Service() {
 
     private fun onPinnedTower(): Boolean {
         val pinned = prefs.pinnedTowerKey ?: return false
-        val current = servingKey ?: return false
-        return pinned == current
+        // في 5G NSA يكون هناك أكثر من خلية مسجّلة (LTE + NR): يكفي تطابق أي واحدة.
+        return registeredKeys.contains(pinned)
     }
 
     private fun refreshServingCell() {
@@ -235,35 +243,65 @@ class CallAutomationService : Service() {
         } catch (_: SecurityException) {
         } catch (_: Exception) {
         }
+        // allCellInfo قد يعيد بيانات قديمة (مخزّنة): اطلب تحديثاً فعلياً كل 3 ثوانٍ.
+        val now = System.currentTimeMillis()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && now - lastCellUpdateReqMs > 3000L) {
+            lastCellUpdateReqMs = now
+            try {
+                telephony.requestCellInfoUpdate(
+                    ContextCompat.getMainExecutor(this),
+                    object : TelephonyManager.CellInfoCallback() {
+                        override fun onCellInfo(cellInfo: MutableList<CellInfo>) {
+                            updateServingFromList(cellInfo)
+                            evaluateGate()
+                        }
+                    }
+                )
+            } catch (_: Exception) {
+            }
+        }
     }
 
     private fun updateServingFromList(cells: List<CellInfo>?) {
-        val serving = CellInfoHelper.servingCell(cells) ?: return
-        val newKey = CellInfoHelper.cellKey(serving)
-        val row = CellInfoHelper.describe(this, serving)
-        val newLabel = "${row.typeLabel} — ${row.bigIdLabel}: ${row.bigIdValue}"
-        val changed = newKey != servingKey
+        if (cells.isNullOrEmpty()) return
+        val registered = cells.filter { it.isRegistered }
+        val keys = registered.mapNotNull { CellInfoHelper.cellKey(it) }.toSet()
+        if (keys.isEmpty()) {
+            if (registeredKeys.isNotEmpty()) {
+                registeredKeys = emptySet()
+                handleTowerChange(wasOnPinned = true)
+            }
+            return
+        }
         val wasOnPinned = onPinnedTower()
-        servingKey = newKey
-        servingLabel = newLabel
-        if (changed) {
-            if (callState == TelephonyManager.CALL_STATE_OFFHOOK && isManagedCall) {
-                // تغيّر البرج أثناء المكالمة: افصل فوراً.
-                endCurrentCall()
-                handler.removeCallbacks(endCallRunnable)
-                isOurOutgoingCall = false
-                isAcceptedIncoming = false
-                isManagedCall = false
-                lastCallEndedMs = System.currentTimeMillis()
-                setStatus(getString(R.string.call_ended_tower))
-            }
-            if (!wasOnPinned && onPinnedTower() && prefs.automationEnabled && prefs.autoRepeat &&
-                callState == TelephonyManager.CALL_STATE_IDLE
-            ) {
-                // عاد إلى البرج المثبّت: أعد الاتصال.
-                scheduleRedial()
-            }
-            updateNotification()
+        val pinned = prefs.pinnedTowerKey
+        val primary = registered.firstOrNull { CellInfoHelper.cellKey(it) == pinned } ?: registered.first()
+        val row = CellInfoHelper.describe(this, primary)
+        registeredKeys = keys
+        servingKey = CellInfoHelper.cellKey(primary)
+        servingLabel = "${row.typeLabel} — ${row.bigIdLabel}: ${row.bigIdValue}"
+        handleTowerChange(wasOnPinned)
+        updateNotification()
+    }
+
+    private fun handleTowerChange(wasOnPinned: Boolean) {
+        val nowOnPinned = onPinnedTower()
+        if (wasOnPinned && !nowOnPinned &&
+            callState == TelephonyManager.CALL_STATE_OFFHOOK && isManagedCall
+        ) {
+            // غادرنا البرج المثبّت أثناء المكالمة: افصل فوراً.
+            handler.removeCallbacks(endCallRunnable)
+            endCurrentCall()
+            isOurOutgoingCall = false
+            isAcceptedIncoming = false
+            isManagedCall = false
+            lastCallEndedMs = System.currentTimeMillis()
+            setStatus(getString(R.string.call_ended_tower))
+        }
+        if (!wasOnPinned && nowOnPinned && prefs.automationEnabled && prefs.autoRepeat &&
+            callState == TelephonyManager.CALL_STATE_IDLE
+        ) {
+            scheduleRedial()
         }
     }
 
@@ -282,10 +320,7 @@ class CallAutomationService : Service() {
 
     /** يوقظ خدمة الوصول لتبدأ حلقة محاولة ضغط الزر فوراً. */
     private fun kickAccessibility() {
-        try {
-            startService(Intent(this, CallAccessibilityService::class.java))
-        } catch (_: Exception) {
-        }
+        CallAccessibilityService.instance?.kick()
     }
 
     private fun scheduleRedial() {
@@ -309,26 +344,31 @@ class CallAutomationService : Service() {
             setStatus(getString(R.string.not_on_pinned_tower))
             return false
         }
-        // ابدأ المكالمة مباشرة بدلاً من فتح لوحة الاتصال فقط.
-        // ACTION_CALL يتطلب إذن CALL_PHONE وقت التشغيل؛ لا نعتمد على
-        // Accessibility لمحاولة تخمين مكان زر الاتصال في تطبيق الهاتف.
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE)
             != PackageManager.PERMISSION_GRANTED
         ) {
             setStatus("يلزم منح إذن إجراء المكالمات (CALL_PHONE) من إعدادات التطبيق")
             return false
         }
+        lastDialAttemptMs = System.currentTimeMillis()
+        dialing = true
+        isOurOutgoingCall = true
+        // الطريقة الأساسية: TelecomManager.placeCall — تعمل من الخدمة في الخلفية،
+        // بخلاف startActivity(ACTION_CALL) التي يمنعها أندرويد 10+ بصمت من الخلفية.
+        try {
+            telecom.placeCall(Uri.fromParts("tel", number, null), Bundle())
+            setStatus(getString(R.string.dialing))
+            return true
+        } catch (_: Exception) {
+        }
+        // احتياط: ACTION_CALL
         return try {
-            lastDialAttemptMs = System.currentTimeMillis()
-            dialing = true
-            isOurOutgoingCall = true
-            val intent = Intent(Intent.ACTION_CALL, Uri.parse("tel:$number"))
+            val intent = Intent(Intent.ACTION_CALL, Uri.fromParts("tel", number, null))
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             startActivity(intent)
             setStatus(getString(R.string.dialing))
-            updateNotification()
             true
-        } catch (e: SecurityException) {
+        } catch (_: SecurityException) {
             dialing = false
             isOurOutgoingCall = false
             setStatus("تعذّر بدء المكالمة: تحقق من إذن إجراء المكالمات")
@@ -341,43 +381,44 @@ class CallAutomationService : Service() {
         }
     }
 
+    private fun hasAnswerPermission(): Boolean =
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            ActivityCompat.checkSelfPermission(this, Manifest.permission.ANSWER_PHONE_CALLS) ==
+            PackageManager.PERMISSION_GRANTED
+
     private fun endCurrentCall(): Boolean {
-        // الإنهاء عبر تطبيق الهاتف: خدمة الوصول تضغط زر الإنهاء في شاشة المكالمة.
+        // الطريقة الأساسية: TelecomManager.endCall بإذن ANSWER_PHONE_CALLS
+        // (لا يحتاج أن يكون التطبيق هو تطبيق الهاتف الافتراضي).
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && hasAnswerPermission()) {
+            try {
+                if (telecom.endCall()) return true
+            } catch (_: Exception) {
+            }
+        }
+        // احتياط: خدمة الوصول تضغط زر الإنهاء.
         if (CallPrefs.isAccessibilityEnabled(this)) {
             prefs.setPending(CallPrefs.PENDING_END, 15000L)
             kickAccessibility()
             return true
         }
-        // احتياط نادر: إن كان التطبيق هو تطبيق الهاتف الافتراضي، استخدم TelecomManager.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            return try {
-                telecom.endCall()
-            } catch (_: Exception) {
-                setStatus(getString(R.string.need_accessibility))
-                false
-            }
-        }
-        setStatus(getString(R.string.need_accessibility))
+        setStatus(getString(R.string.need_answer_permission))
         return false
     }
 
     private fun acceptIncomingCall(): Boolean {
-        // الرد عبر تطبيق الهاتف: خدمة الوصول تضغط زر الرد في شاشة المكالمة الواردة.
+        if (hasAnswerPermission()) {
+            try {
+                telecom.acceptRingingCall()
+                return true
+            } catch (_: Exception) {
+            }
+        }
         if (CallPrefs.isAccessibilityEnabled(this)) {
             prefs.setPending(CallPrefs.PENDING_ANSWER, 25000L)
             kickAccessibility()
             return true
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            return try {
-                telecom.acceptRingingCall()
-                true
-            } catch (_: Exception) {
-                setStatus(getString(R.string.need_accessibility))
-                false
-            }
-        }
-        setStatus(getString(R.string.need_accessibility))
+        setStatus(getString(R.string.need_answer_permission))
         return false
     }
 
