@@ -309,25 +309,33 @@ class CallAutomationService : Service() {
             setStatus(getString(R.string.not_on_pinned_tower))
             return false
         }
-        // الاتصال عبر تطبيق الهاتف نفسه: يفتح الماسح الرقمي بالرقم جاهزاً،
-        // وخدمة الوصول تضغط زر الاتصال تلقائياً. لا يحتاج إذن اتصال
-        // ولا تعيين التطبيق كتطبيق الهاتف الافتراضي.
+        // ابدأ المكالمة مباشرة بدلاً من فتح لوحة الاتصال فقط.
+        // ACTION_CALL يتطلب إذن CALL_PHONE وقت التشغيل؛ لا نعتمد على
+        // Accessibility لمحاولة تخمين مكان زر الاتصال في تطبيق الهاتف.
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            setStatus("يلزم منح إذن إجراء المكالمات (CALL_PHONE) من إعدادات التطبيق")
+            return false
+        }
         return try {
             lastDialAttemptMs = System.currentTimeMillis()
             dialing = true
             isOurOutgoingCall = true
-            prefs.setPending(CallPrefs.PENDING_CALL, 20000L)
-            kickAccessibility()
-            val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$number"))
+            val intent = Intent(Intent.ACTION_CALL, Uri.parse("tel:$number"))
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             startActivity(intent)
             setStatus(getString(R.string.dialing))
             updateNotification()
             true
+        } catch (e: SecurityException) {
+            dialing = false
+            isOurOutgoingCall = false
+            setStatus("تعذّر بدء المكالمة: تحقق من إذن إجراء المكالمات")
+            false
         } catch (_: Exception) {
             dialing = false
             isOurOutgoingCall = false
-            prefs.clearPending()
             setStatus(getString(R.string.unavailable))
             false
         }
