@@ -10,7 +10,7 @@
     <string name="operator_settings">إعدادات المشغّل</string>
     <string name="about">حول التطبيق</string>
     <string name="about_title">حول TowerScanner</string>
-    <string name="about_body">يعرض هذا التطبيق الأبراج الخلوية القريبة والبرج المتصل حالياً، مع معرّفات الخلية وقوة الإشارة.\n\nقسم «الاتصال» يضيف أتمتة اختيارية: ثبّت برجاً، وأضف رقماً ومدة بالثواني، فيتصل التطبيق بالرقم فقط أثناء وجودك على البرج المثبّت، ويفصل بعد المدة المحددة ويعيد الاتصال، ولا يجيب على مكالمات الرقم إلا على نفس البرج.\n\nلإنهاء المكالمات والرد عليها تلقائياً يجب تعيين التطبيق كتطبيق الهاتف الافتراضي من إعدادات الاتصال.</string>
+    <string name="about_body">يعرض هذا التطبيق الأبراج الخلوية القريبة والبرج المتصل حالياً، مع معرّفات الخلية وقوة الإشارة، ويحدّث القائمة كل ثانية عند تفعيل التحديث التلقائي.\n\nقسم «الاتصال» يضيف أتمتة اختيارية: ثبّت برجاً، وأضف رقماً ومدة بالثواني، فيتصل التطبيق بالرقم فقط أثناء وجودك على البرج المثبّت، ويفصل بعد المدة المحددة ويعيد الاتصال، ولا يجيب على مكالمات الرقم إلا على نفس البرج.\n\nالمكالمات تتم من تطبيق الهاتف نفسه: يفتح التطبيق شاشة الاتصال بالرقم، وخدمة الوصول تضغط زر الاتصال والإنهاء والرد تلقائياً. فعّل خدمة الوصول مرة واحدة من إعدادات الاتصال، ولا يحتاج التطبيق إذن اتصال ولا تعيينه كتطبيق الهاتف الافتراضي.</string>
     <string name="about_ok">حسناً</string>
     <string name="need_permission">يحتاج التطبيق إذن الموقع وحالة الهاتف لعرض الأبراج. امنح الأذونات ثم أعد التحديث.</string>
     <string name="grant_permission">منح الأذونات</string>
@@ -50,10 +50,17 @@
     <string name="no_serving_to_pin">لا يوجد برج متصل حالياً لتثبيته</string>
     <string name="enable_automation">تفعيل أتمتة الاتصال</string>
     <string name="auto_repeat">إعادة الاتصال تلقائياً بعد الفصل (طالما أنت على البرج المثبّت)</string>
+    <string name="signal_strength">قوة الإشارة</string>
     <string name="call_now">📞 اتصل الآن</string>
     <string name="stop_automation">⏹ إيقاف</string>
-    <string name="set_default_dialer">تعيين كتطبيق الهاتف الافتراضي</string>
-    <string name="default_dialer_hint">لإنهاء المكالمات والرد عليها تلقائياً يجب أن يكون هذا التطبيق هو تطبيق الهاتف الافتراضي، وإلا سيرفض أندرويد إنهاء المكالمة أو الرد عليها.</string>
+    <string name="accessibility_title">الاتصال عبر تطبيق الهاتف</string>
+    <string name="accessibility_hint">المكالمات تتم من تطبيق الهاتف نفسه دون إذن اتصال ودون تعيين هذا التطبيق كتطبيق افتراضي. فعّل خدمة الوصول مرة واحدة من هنا: افتح إعدادات الوصول، وابحث عن TowerScanner، وفعّل الخدمة، ثم عُد إلى هنا.</string>
+    <string name="accessibility_description">خدمة تضغط أزرار تطبيق الهاتف (اتصال وإنهاء ورد) لتعمل أتمتة الاتصال حسب البرج المثبّت.</string>
+    <string name="enable_accessibility">تفعيل خدمة الوصول للاتصال</string>
+    <string name="accessibility_on">خدمة الوصول: مفعّلة ✓</string>
+    <string name="accessibility_off">خدمة الوصول: غير مفعّلة — فعّلها ليتم الاتصال والإنهاء والرد تلقائياً</string>
+    <string name="need_accessibility">فعّل خدمة الوصول من إعدادات الاتصال ليتم الإنهاء والرد تلقائياً من تطبيق الهاتف.</string>
+    <string name="automation_start_failed">تعذّر تشغيل الأتمتة — جرّب إغلاق التطبيق وإعادة فتحه ثم فعّلها مرة أخرى.</string>
     <string name="status">الحالة</string>
     <string name="call_status_idle">متوقف</string>
     <string name="enter_number_first">أدخل الرقم أولاً واحفظه</string>
@@ -64,8 +71,6 @@
     <string name="call_ended_tower">تغيّر البرج — تم الفصل، وسيعاود الاتصال عند العودة للبرج المثبّت</string>
     <string name="incoming_answered">تم الرد على المكالمة الواردة من الرقم المحدد</string>
     <string name="incoming_ignored">مكالمة واردة من الرقم المحدد لكنك لست على البرج المثبّت — لم يتم الرد</string>
-    <string name="need_call_permission">يحتاج التطبيق إذن الاتصال والرد على المكالمات. امنح الأذونات من هنا.</string>
-    <string name="need_default_dialer">عيّن التطبيق كتطبيق الهاتف الافتراضي ليستطيع إنهاء المكالمة أو الرد عليها.</string>
     <string name="automation_running">الأتمتة تعمل في الخلفية</string>
     <string name="automation_stopped">الأتمتة متوقفة</string>
 </resources>
