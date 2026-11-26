@@ -53,13 +53,17 @@ class CallAutomationService : Service() {
     private val pollRunnable = object : Runnable {
         override fun run() {
             refreshServingCell()
-            // أمان: إذا لم يبدأ الاتصال خلال 10 ثوانٍ (مثلاً ألغاه المستخدم)،
-            // أعد ضبط علامة الاتصال حتى لا تتوقف الأتمتة.
+            // أمان: إن فُتح الماسح ولم يبدأ الاتصال خلال 12 ثانية، فزر الاتصال
+            // لم يُضغط (غالباً خدمة الوصول غير مفعّلة): أوقف المحاولات المتكررة
+            // وأخبر المستخدم بالسبب بدل إعادة فتح الماسح بلا فائدة.
             if (dialing && callState == TelephonyManager.CALL_STATE_IDLE &&
-                System.currentTimeMillis() - lastDialAttemptMs > 10000L
+                System.currentTimeMillis() - lastDialAttemptMs > 12000L
             ) {
                 dialing = false
                 isOurOutgoingCall = false
+                prefs.clearPending()
+                prefs.dialBlockedUntilMs = System.currentTimeMillis() + 60000L
+                setStatus(getString(R.string.auto_call_failed))
             }
             evaluateGate()
             handler.postDelayed(this, POLL_MS)
@@ -257,11 +261,20 @@ class CallAutomationService : Service() {
         if (singleCallMode) return
         if (callState != TelephonyManager.CALL_STATE_IDLE) return
         if (dialing) return
+        if (System.currentTimeMillis() < prefs.dialBlockedUntilMs) return
         if (!onPinnedTower()) return
         val now = System.currentTimeMillis()
         if (now - lastDialAttemptMs < 5000L) return
         if (now - lastCallEndedMs < 3000L && lastCallEndedMs != 0L) return
         placeOutgoingCall()
+    }
+
+    /** يوقظ خدمة الوصول لتبدأ حلقة محاولة ضغط الزر فوراً. */
+    private fun kickAccessibility() {
+        try {
+            startService(Intent(this, CallAccessibilityService::class.java))
+        } catch (_: Exception) {
+        }
     }
 
     private fun scheduleRedial() {
@@ -293,6 +306,7 @@ class CallAutomationService : Service() {
             dialing = true
             isOurOutgoingCall = true
             prefs.setPending(CallPrefs.PENDING_CALL, 20000L)
+            kickAccessibility()
             val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$number"))
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             startActivity(intent)
@@ -312,6 +326,7 @@ class CallAutomationService : Service() {
         // الإنهاء عبر تطبيق الهاتف: خدمة الوصول تضغط زر الإنهاء في شاشة المكالمة.
         if (CallPrefs.isAccessibilityEnabled(this)) {
             prefs.setPending(CallPrefs.PENDING_END, 15000L)
+            kickAccessibility()
             return true
         }
         // احتياط نادر: إن كان التطبيق هو تطبيق الهاتف الافتراضي، استخدم TelecomManager.
@@ -331,6 +346,7 @@ class CallAutomationService : Service() {
         // الرد عبر تطبيق الهاتف: خدمة الوصول تضغط زر الرد في شاشة المكالمة الواردة.
         if (CallPrefs.isAccessibilityEnabled(this)) {
             prefs.setPending(CallPrefs.PENDING_ANSWER, 25000L)
+            kickAccessibility()
             return true
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
