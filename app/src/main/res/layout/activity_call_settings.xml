@@ -160,6 +160,12 @@
             android:text="@string/call_now" />
 
         <Button
+            android:id="@+id/btnTestCall"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/test_auto_call" />
+
+        <Button
             android:id="@+id/btnStop"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
