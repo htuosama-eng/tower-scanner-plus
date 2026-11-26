@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/call_settings_title"
+            android:textSize="22sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="@string/default_dialer_hint"
+            android:textColor="#546E7A" />
+
+        <Button
+            android:id="@+id/btnDefaultDialer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/set_default_dialer" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/call_number"
+            android:textStyle="bold" />
+
+        <EditText
+            android:id="@+id/etNumber"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="@string/call_number_hint"
+            android:inputType="phone" />
+
+        <Button
+            android:id="@+id/btnSaveNumber"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/save_number" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/out_duration"
+            android:textStyle="bold" />
+
+        <EditText
+            android:id="@+id/etOutDuration"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="15"
+            android:inputType="number" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/in_duration"
+            android:textStyle="bold" />
+
+        <EditText
+            android:id="@+id/etInDuration"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="15"
+            android:inputType="number" />
+
+        <Button
+            android:id="@+id/btnSaveDurations"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/save_durations" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/pinned_tower"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tvPinnedTower"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/no_pinned_tower" />
+
+        <Button
+            android:id="@+id/btnPinTower"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/pin_current_tower" />
+
+        <Button
+            android:id="@+id/btnUnpinTower"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/unpin_tower" />
+
+        <Switch
+            android:id="@+id/swAutomation"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/enable_automation" />
+
+        <Switch
+            android:id="@+id/swRepeat"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/auto_repeat" />
+
+        <Button
+            android:id="@+id/btnCallNow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/call_now" />
+
+        <Button
+            android:id="@+id/btnStop"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/stop_automation" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/status"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tvStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/call_status_idle" />
+    </LinearLayout>
+</ScrollView>
