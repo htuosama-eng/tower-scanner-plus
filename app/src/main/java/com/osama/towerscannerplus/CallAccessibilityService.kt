@@ -79,8 +79,16 @@ class CallAccessibilityService : AccessibilityService() {
         }
         val idWords = idWordsFor(action)
         // أولاً: مطابقة معرّف الزر أو وصفه (الأدق)، ثم مطابقة نصه.
-        return clickMatchingNode(root, words, idWords, byIdOrDesc = true) ||
+        if (clickMatchingNode(root, words, idWords, byIdOrDesc = true) ||
             clickMatchingNode(root, words, idWords, byIdOrDesc = false)
+        ) return true
+        // بديل أخير للاتصال والإنهاء: بعض تطبيقات الهاتف زرها أيقونة بلا نص
+        // ولا وصف — اضغط أكبر زر في أسفل منتصف الشاشة (زر الاتصال/الإنهاء).
+        // لا يُستخدم للرد حتى لا يُضغط زر الرفض بالخطأ.
+        if (action == CallPrefs.PENDING_CALL || action == CallPrefs.PENDING_END) {
+            if (clickLargestBottomButton(root)) return true
+        }
+        return false
     }
 
     private fun clickMatchingNode(
@@ -126,6 +134,45 @@ class CallAccessibilityService : AccessibilityService() {
         } catch (_: Exception) {
             false
         }
+    }
+
+    /**
+     * أكبر زر قابل للضغط في أسفل منتصف الشاشة — في شاشة الاتصال يكون زر
+     * الاتصال، وفي شاشة المكالمة يكون زر الإنهاء.
+     */
+    private fun clickLargestBottomButton(root: AccessibilityNodeInfo): Boolean {
+        val metrics = resources.displayMetrics
+        val width = metrics.widthPixels
+        val height = metrics.heightPixels
+        var best: AccessibilityNodeInfo? = null
+        var bestArea = 0
+        val stack = ArrayDeque<AccessibilityNodeInfo>()
+        stack.add(root)
+        val rect = android.graphics.Rect()
+        while (stack.isNotEmpty()) {
+            val node = stack.removeFirst()
+            val className = node.className?.toString().orEmpty()
+            val looksLikeButton = node.isClickable &&
+                (className.endsWith("Button") ||
+                    className.endsWith("ImageButton") ||
+                    className.contains("FloatingActionButton"))
+            if (looksLikeButton && node.isEnabled && node.isVisibleToUser) {
+                node.getBoundsInScreen(rect)
+                val centerX = rect.centerX()
+                val centerY = rect.centerY()
+                val area = rect.width() * rect.height()
+                val inBottomCenter = centerX > width * 0.25 && centerX < width * 0.75 &&
+                    centerY > height * 0.5
+                if (inBottomCenter && area > bestArea) {
+                    bestArea = area
+                    best = node
+                }
+            }
+            for (i in 0 until node.childCount) {
+                node.getChild(i)?.let { stack.add(it) }
+            }
+        }
+        return best != null && performClick(best)
     }
 
     companion object {
